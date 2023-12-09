@@ -106,10 +106,16 @@ def torch_main_worker_finish_first(func: Callable):
 def dataset_map_multi_worker(
     dataset: datasets.Dataset, map_fn: Callable, *args, **kwargs
 ) -> datasets.Dataset:
+
     try:
         rank = torch.distributed.get_rank()
         world_size = torch.distributed.get_world_size()
+        # If not specified, use all of the CPUs we have available.
+        kwargs["num_proc"] = kwargs.get(
+            "num_proc", len(os.sched_getaffinity(0)) // world_size
+        )
     except (RuntimeError, ValueError):
+        kwargs["num_proc"] = kwargs.get("num_proc", len(os.sched_getaffinity(0)))
         return dataset.map(map_fn, *args, **kwargs)
     datasets.disable_caching()
 
@@ -177,7 +183,9 @@ def get_embeddings_openai_manifest(
 def get_embeddings_openai_vanilla_multithread(
     text_list, model="text-embedding-ada-002"
 ) -> list:
-    import openai
+    from openai import OpenAI
+
+    client = OpenAI()
 
     # print(f"running openai on text_list of length {len(text_list)}, first element '{text_list[0]}'")
 
@@ -191,12 +199,10 @@ def get_embeddings_openai_vanilla_multithread(
 
     def process_batch(batch):
         text_list_batch = text_list[batch * 128 : (batch + 1) * 128]
-        response = openai.Embedding.create(
-            input=text_list_batch,
-            model=model,
-            encoding_format="float",
+        response = client.embeddings.create(
+            input=text_list_batch, model=model, encoding_format="float"
         )
-        return [e["embedding"] for e in response["data"]]
+        return [e.embedding for e in response.data]
 
     with ThreadPoolExecutor() as executor:
         batch_indices = range(batches)
@@ -213,19 +219,19 @@ def get_embeddings_openai_vanilla(text_list, model="text-embedding-ada-002") -> 
     # embeddings model: https://platform.openai.com/docs/guides/embeddings/use-cases
     #    api ref: https://platform.openai.com/docs/api-reference/embeddings/create
     # TODO: set up a caching system somehow.
-    import openai
+    from openai import OpenAI
+
+    client = OpenAI()
 
     # print(f"running openai on text_list of length {len(text_list)}, first element '{text_list[0]}'")
     batches = math.ceil(len(text_list) / 128)
     outputs = []
     for batch in range(batches):
         text_list_batch = text_list[batch * 128 : (batch + 1) * 128]
-        response = openai.Embedding.create(
-            input=text_list_batch,
-            model=model,
-            encoding_format="float",  # override default base64 encoding...
+        response = client.embeddings.create(
+            input=text_list_batch, model=model, encoding_format="float"
         )
-        outputs.extend([e["embedding"] for e in response["data"]])
+        outputs.extend([e.embedding for e in response.data])
     return outputs
 
 
@@ -248,10 +254,6 @@ def embed_api(
     else:
         raise ValueError(f"unsupported api name {api_name}")
 
-    # print("GETTING EMBEDDINGS:")
-    # print(text_list)
-    # print(torch.tensor(embeddings).abs().sum(dim=-1).tolist())
-    # print()
     return torch.tensor(embeddings, device=input_ids.device, dtype=torch.float32)
 
 

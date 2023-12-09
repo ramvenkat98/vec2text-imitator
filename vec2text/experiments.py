@@ -19,6 +19,7 @@ from vec2text.data_helpers import dataset_from_args, load_standard_val_datasets
 from vec2text.models import (
     CorrectorEncoderFromLogitsModel,
     CorrectorEncoderModel,
+    InversionFromLogitsEmbModel,
     InversionFromLogitsModel,
     InversionModel,
     InversionModelBagOfWords,
@@ -325,7 +326,7 @@ class Experiment(abc.ABC):
     def load_tokenizer(self) -> transformers.PreTrainedTokenizer:
         tokenizer = transformers.AutoTokenizer.from_pretrained(
             self.model_args.model_name_or_path,
-            padding=True,
+            padding="max_length",
             truncation="max_length",
             max_length=self.model_args.max_seq_length,
         )
@@ -345,7 +346,7 @@ class Experiment(abc.ABC):
             tokenizer,
             model=None,
             label_pad_token_id=-100,
-            padding=True,
+            padding="max_length",
             max_length=self.model_args.max_seq_length,
             pad_to_multiple_of=8 if self.training_args.fp16 else None,
         )
@@ -421,6 +422,7 @@ class Experiment(abc.ABC):
                     batched=True,
                     batch_size=self.training_args.per_device_train_batch_size,
                     new_fingerprint=new_fingerprint,
+                    num_proc=1,
                 )
             tokenized_datasets = datasets.DatasetDict(new_tokenized_datasets)
         ###########################################################################
@@ -491,6 +493,7 @@ class Experiment(abc.ABC):
                     new_fingerprint=(
                         d._fingerprint + md5_hash_kwargs(**self.dataset_kwargs) + ""
                     ),
+                    num_proc=1,
                 )
             val_datasets_dict = datasets.DatasetDict(new_tokenized_datasets)
         return val_datasets_dict
@@ -660,9 +663,12 @@ class InversionFromLogitsExperiment(InversionExperiment):
         return "emb-inv-logits-1"
 
     def load_model(self) -> transformers.PreTrainedModel:
-        return InversionFromLogitsModel(
-            config=self.config,
-        )
+        if self.training_args.experiment == "inversion_from_logits_emb":
+            return InversionFromLogitsEmbModel(config=self.config)
+        else:
+            return InversionFromLogitsModel(
+                config=self.config,
+            )
 
 
 class InversionExperimentDecoderOnly(InversionExperiment):
@@ -782,6 +788,7 @@ EXPERIMENT_CLS_MAP = {
     "inversion": InversionExperiment,
     "inversion_decoder_only": InversionExperimentDecoderOnly,
     "inversion_from_logits": InversionFromLogitsExperiment,
+    "inversion_from_logits_emb": InversionFromLogitsExperiment,
     "corrector": CorrectorExperiment,
     "corrector_encoder": CorrectorExperiment,  # backwards-compatible; does same thing as just 'corrector'
     #

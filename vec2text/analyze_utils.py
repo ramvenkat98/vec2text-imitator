@@ -149,16 +149,16 @@ def args_from_config(args_cls, config):
 
 def load_experiment_and_trainer_from_pretrained(name: str, use_less_data: int = 1000):
     config = InversionConfig.from_pretrained(name)
-
     model_args = args_from_config(ModelArguments, config)
     data_args = args_from_config(DataArguments, config)
     training_args = args_from_config(TrainingArguments, config)
 
     data_args.use_less_data = use_less_data
-    ########################################################################
+    #######################################################################
     from accelerate.state import PartialState
 
-    training_args._n_gpu = 1  # Don't load in DDP
+    training_args._n_gpu = 1 if torch.cuda.is_available() else 0  # Don't load in DDP
+    training_args.bf16 = 0  # no bf16 in case no support from GPU
     training_args.local_rank = -1  # Don't load in DDP
     training_args.distributed_state = PartialState()
     training_args.deepspeed_plugin = None  # For backwards compatibility
@@ -172,6 +172,7 @@ def load_experiment_and_trainer_from_pretrained(name: str, use_less_data: int = 
     experiment = experiments.experiment_from_args(model_args, data_args, training_args)
     trainer = experiment.load_trainer()
     trainer.model = trainer.model.__class__.from_pretrained(name)
+    trainer.model.to(training_args.device)
     return experiment, trainer
 
 

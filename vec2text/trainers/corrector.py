@@ -638,12 +638,11 @@ class Corrector(BaseTrainer):
             return imitator_encoding
         emb_input_ids = self.embedder_tokenizer(
             inputs_str,
-            max_length=input_ids.shape[1],
+            max_length=self.model.config.max_seq_length,
             truncation=True,
             padding="max_length",
             return_tensors="pt",
         ).to(input_ids.device)
-
         emb_encoding = self.get_frozen_embeddings(
             embedder_input_ids=emb_input_ids.input_ids,
             embedder_attention_mask=emb_input_ids.attention_mask,

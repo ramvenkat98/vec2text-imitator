@@ -1,8 +1,10 @@
 __pycache__/
 
 slurm-*.out
+*cache/
 *.p
 .ipynb_checkpoints/
+*cache/
 
 build/
 dist/
@@ -10,8 +12,7 @@ vec2text.egg-info/
 
 embeddings/
 logs/
-notebooks/
-notebooks_logits/
+notebook*/
 msmarco_msl128_hypotheses/
 saves/
 slurm-scripts/

@@ -178,10 +178,6 @@ class ModelArguments:
             "choices": FREEZE_STRATEGIES,
         },
     )
-    suffix_conditioning: bool = field(
-        default=False,
-        metadata={"help": "for logits inversion, whether to condition on the suffix"},
-    )
 
     def __post_init__(self):
         if self.config_overrides is not None and (
@@ -272,7 +268,7 @@ class TrainingArguments(transformers.TrainingArguments):
         default=128, metadata={"help": "Batch size per GPU/TPU core/CPU for training."}
     )
     bf16: bool = field(
-        default=True,
+        default=False,
         metadata={"help": ("Whether to use bf16 (mixed) precision instead of 32-bit.")},
     )
     # torch_compile: bool = True # for torch 2
@@ -286,6 +282,7 @@ class TrainingArguments(transformers.TrainingArguments):
             "choices": [
                 "inversion",  # our model: projects and feeds to encoder-decoder
                 "inversion_from_logits",
+                "inversion_from_logits_emb",
                 "inversion_decoder_only",  # baseline: use single embedding as input to a decoder
                 "inversion_bow",
                 "inversion_na",
@@ -346,6 +343,15 @@ class TrainingArguments(transformers.TrainingArguments):
                 " if you precomputed all the embeddings for train and val, this will"
                 " work fine, except the embedding-based metrics (just cosine similarity"
                 " I think) will be broken."
+            )
+        },
+    )
+    ddp_find_unused_parameters: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": (
+                "When using distributed training, the value of the flag `find_unused_parameters` passed to "
+                "`DistributedDataParallel`."
             )
         },
     )

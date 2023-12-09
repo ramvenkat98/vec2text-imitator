@@ -32,7 +32,10 @@ def preprocess_logits_for_metrics(logits, labels):
 
 
 def sem(L: List[float]) -> float:
-    return scipy.stats.sem(np.array(L))
+    result = scipy.stats.sem(np.array(L))
+    if isinstance(result, np.ndarray):
+        return result.mean().item()
+    return result
 
 
 def mean(L: Union[List[int], List[float]]) -> float:
@@ -338,7 +341,9 @@ class BaseTrainer(transformers.Trainer):
         rouge_result = self.metric_rouge.compute(
             predictions=predictions_str, references=references_str
         )
-        self.bleu_results = bleu_results  # store bleu results in case we want to use them later for t-tests
+        self.bleu_results = (
+            bleu_results.tolist()
+        )  # store bleu results in case we want to use them later for t-tests
         # bertscore_result = self.metric_bertscore.compute(
         #     predictions=predictions_str, references=references_str, lang="en"
         # )
@@ -486,7 +491,7 @@ class BaseTrainer(transformers.Trainer):
                     "emb_top1_equal_sem": sem(emb_topk_equal),
                 }
 
-        except TypeError:
+        except (TypeError, RuntimeError):
             sim_result = {"emb_cos_sim": 0, "emb_cos_sim_sem": 0}
 
         # Store stuff for access later.
@@ -526,7 +531,10 @@ class BaseTrainer(transformers.Trainer):
         """Copying transformers load_from_checkpoint so we can modify state dicts on load to support
         post-hoc model architecture changes (specifically, adding dropout).
         """
-        WEIGHTS_NAME = "pytorch_model.bin"
+        super()._load_from_checkpoint(resume_from_checkpoint, model=model)
+        return
+        # WEIGHTS_NAME = "pytorch_model.bin"
+        WEIGHTS_NAME = "model.safetensors"
 
         if model is None:
             model = self.model

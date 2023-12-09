@@ -95,7 +95,7 @@ def tokenize_function_llama_chat(
                     examples["prefix"], examples["suffix"]
                 )
             ],
-            padding=True,
+            padding="max_length",
             truncation=True,
             max_length=max_seq_length,
             return_tensors="pt",
@@ -129,3 +129,32 @@ def embed_dataset_batch(model: InversionModel, batch: Dict) -> Dict:
     with torch.no_grad():
         batch["frozen_embeddings"] = model.call_embedding_model(**emb_input_ids)
     return batch
+
+
+def get_tokenizer_mapping(
+    lm: str, inverter: str, inverter_vocab_size: int
+) -> torch.Tensor:
+    """Computes the mapping from token outputs in `lm`'s vocabulary to those in `inverter's
+    vocabulary. Makes some assumptions about spacing.
+    """
+    lm_tokenizer = transformers.AutoTokenizer.from_pretrained(lm)
+    inverter_tokenizer = transformers.AutoTokenizer.from_pretrained(inverter)
+
+    lm_vocab = lm_tokenizer.vocab
+    mapping = torch.zeros(len(lm_vocab), dtype=torch.long)
+    for k, idx in lm_tokenizer.vocab.items():
+        # We replace space tokens with nothing and allow the call to
+        # inverter_tokenizer.decode to determine this. We also
+        # filter out 2 and 3 as first tokens which are extremely common
+        # when the T5 tokenizer processes unicode. (These are hacks
+        # specific to the LLAMA-T5 lm-inverter pairing, and it would
+        # be better to find an automated wa to do this later.)
+        mapping[idx] = inverter_tokenizer.encode(k.replace("▁", " "))[0]
+        if mapping[idx] in [2, 3]:
+            mapping[idx] = inverter_tokenizer.encode(k.replace("▁", " "))[1]
+
+    preservation = len(set(mapping.tolist())) / len(lm_vocab)
+    print(
+        f"Mapped tokenizer {lm} to {inverter}. Preserved {preservation*100:.1f}% of unique tokens."
+    )
+    return mapping

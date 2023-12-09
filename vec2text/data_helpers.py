@@ -4,8 +4,10 @@ import random
 from typing import Dict, List
 
 import datasets
+import torch
 
 from vec2text.run_args import DataArguments
+from vec2text.utils import dataset_map_multi_worker
 
 
 def retain_dataset_columns(
@@ -13,24 +15,6 @@ def retain_dataset_columns(
 ) -> datasets.Dataset:
     column_names_to_remove = [c for c in d.features if c not in allowed_columns]
     return d.remove_columns(column_names_to_remove)
-
-
-def create_passage__dpr(ctx: dict):
-    """(from dpr code)"""
-    assert ("psg_id" in ctx.keys()) or (
-        "passage_id" in ctx.keys()
-    ), f"invalid keys {ctx.keys()}"
-    # passage_id = ctx.get("psg_id", ctx.get("passage_id"))
-    # return BiEncoderPassage(
-    #     normalize_passage(ctx["text"]) if self.normalize else ctx["text"],
-    #     ctx["title"],
-    #     int(passage_id)
-    # )
-    #
-    # TODO consider using title. DPR concatenates title + [SEP]...
-    # TODO also consider normalization -- does DPR not use normalization?
-    # (seems disabled in their biencoder_data.py file).
-    return ctx["text"]
 
 
 def load_nq_dpr_corpus() -> datasets.Dataset:
@@ -57,11 +41,22 @@ def create_ompi_ex(ex: Dict[str, str]) -> Dict[str, str]:
     return ex
 
 
+def get_world_size() -> int:
+    try:
+        return torch.distributed.get_world_size()
+    except (RuntimeError, ValueError):
+        return 1
+
+
 def load_one_million_paired_instructions() -> datasets.Dataset:
     # has only "train" split, and "system" (system prompt)
     # and "user" (user input) columns
     dataset_dict = datasets.load_dataset("wentingzhao/one-million-paired-instructions")
-    dataset_dict = dataset_dict.map(create_ompi_ex)
+    dataset_dict = dataset_map_multi_worker(
+        dataset_dict,
+        map_fn=create_ompi_ex,
+        num_proc=(len(os.sched_getaffinity(0)) // get_world_size()),
+    )
 
     return dataset_dict["train"]
 
@@ -70,7 +65,7 @@ def load_one_million_instructions() -> datasets.Dataset:
     # has only "train" split, and "system" (system prompt)
     # and "user" (user input) columns
     dataset_dict = datasets.load_dataset("wentingzhao/one-million-instructions")
-    dataset_dict = dataset_dict.map(create_ompi_ex)
+    dataset_dict = dataset_map_multi_worker(dataset_dict, create_ompi_ex)
 
     return dataset_dict["train"]
 
