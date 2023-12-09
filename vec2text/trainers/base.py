@@ -390,6 +390,7 @@ class BaseTrainer(transformers.Trainer):
 
         if not len(decoded_preds):
             return {}
+        print(f"Showing 3 samples out of {len(decoded_preds)} in total")
         print("[pred]", decoded_preds[0])
         print("[true]", decoded_labels[0])
         print("\n\n")
@@ -520,7 +521,7 @@ class BaseTrainer(transformers.Trainer):
     def _remap_state_dict(self, state_dict: Dict) -> Dict:
         """Edit keys posthumously on model load."""
         return state_dict
-
+    '''
     def _load_from_checkpoint(self, resume_from_checkpoint, model=None):
         """Copying transformers load_from_checkpoint so we can modify state dicts on load to support
         post-hoc model architecture changes (specifically, adding dropout).
@@ -555,3 +556,5 @@ class BaseTrainer(transformers.Trainer):
             del state_dict
         else:
             raise ValueError("error loading from checkpoint")
+    '''
+    

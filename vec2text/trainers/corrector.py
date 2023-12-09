@@ -7,6 +7,8 @@ import datasets
 import torch
 import torch.nn as nn
 import transformers
+from transformers import AutoModel
+from transformers import AutoTokenizer
 
 from vec2text.models import CorrectorEncoderModel
 from vec2text.models.model_utils import freeze_params
@@ -15,9 +17,18 @@ from vec2text.utils import dataset_map_multi_worker
 
 from .base import BaseTrainer
 from .inversion import InversionTrainer
+import torch.nn.functional as F
 
 logger = logging.getLogger(__name__)
 
+class EmbeddingImitator(nn.Module):
+    def __init__(self):
+        super(EmbeddingImitator, self).__init__()
+        self.bert = AutoModel.from_pretrained("prajjwal1/bert-medium")
+        self.embedder_imitator = nn.Sequential(nn.Dropout(0.2), nn.Linear(512, 768))
+    def forward(self, input_ids, attention_masks):
+        output = self.bert(input_ids, attention_masks)
+        return self.embedder_imitator(output.pooler_output)
 
 class Corrector(BaseTrainer):
     """Trains an encoder model to generate embeddings that recursively correct of an
@@ -50,9 +61,12 @@ class Corrector(BaseTrainer):
         # a model trained & loaded via the inversion trainer.
         self.inversion_trainer = inversion_trainer
         self.inversion_trainer.model.use_frozen_embeddings_as_input = True
+        # smaller_train_dataset = self.inversion_trainer.train_dataset.select(range(1000000))
+
         super().__init__(
             model=model,
             args=args,
+            # Limiting to 1 million by default because of memory/compute constraints
             train_dataset=self.inversion_trainer.train_dataset,
             eval_dataset=self.inversion_trainer.eval_dataset,
             **kwargs,
@@ -70,9 +84,34 @@ class Corrector(BaseTrainer):
         # If set, return closest (in embedding space) hypothesis we see during generation
         self.return_best_hypothesis = False
 
+        # If set, train the corrector with embeddings from an imitator instead of ground-truth
+        # embeddings
+        self.use_imitator = args.use_imitator
+        print("Use imitator is", self.use_imitator)
+        print("Device is", self.args.device)
+        if self.use_imitator:
+            self.imitator_model = self.load_imitator_model('encoder_ckpt.pt')
+            self.imitator_tokenizer = AutoTokenizer.from_pretrained("prajjwal1/bert-medium")
+            freeze_params(self.imitator_model)
+            print("Imitator model type is", type(self.imitator_model))
         # Need to train with same device as the inversion model to avoid weird errors.
         assert self.args.fp16 == self.inversion_trainer.args.fp16
         assert self.args.bf16 == self.inversion_trainer.args.bf16
+
+    def load_imitator_model(self, ckpt_file):
+        d = torch.load(ckpt_file, map_location = self.args.device)
+        ckpt_model = EmbeddingImitator().to(self.args.device)
+        ckpt_model.load_state_dict(d['model'])
+        '''
+        optimizer = torch.optim.AdamW(ckpt_model.parameters(), lr=5e-5, eps=1e-8)
+        optimizer.load_state_dict(d['optimizer'])
+        total_steps = len(train_dataloader) * epochs
+        scheduler = get_linear_schedule_with_warmup(optimizer,       
+                         num_warmup_steps=0, num_training_steps=total_steps)
+        scheduler.load_state_dict(d['scheduler'])
+        step = d['step']
+        '''
+        return ckpt_model # , optimizer, scheduler, step
 
     def evaluation_loop(
         self, dataloader: torch.utils.data.DataLoader, *args, **kwargs
@@ -156,10 +195,16 @@ class Corrector(BaseTrainer):
         # Note that the dataset fingerprint changes with calls to select()
         # so we won't overwrite the big dataset files when we use tiny subsets
         # during testing.
-        cache_dir = os.environ["VEC2TEXT_CACHE"]
+        cache_dir = os.environ.get(
+            "VEC2TEXT_CACHE", os.path.expanduser("~/.cache/inversion")
+        )
+        # cache_dir = os.environ["VEC2TEXT_CACHE"]
         assert os.path.exists(cache_dir)
         ####
         cache_path = os.path.join(cache_dir, f"{dataset._fingerprint}_hypotheses.cache")
+        if self.use_imitator:
+            print("In the right cache path for imitators")
+            cache_path = os.path.join(cache_dir, f"{dataset._fingerprint}_imitator_hypotheses.cache")
         if not os.path.exists(cache_path):
             print(f"\t[{dataset.builder_name}] Saving hypotheses to path {cache_path}")
 
@@ -570,11 +615,27 @@ class Corrector(BaseTrainer):
 
         return frozen_embeddings.to(self.args.device)
 
-    def embed_generated_hypothesis(self, input_ids: torch.Tensor) -> torch.Tensor:
+    def embed_generated_hypothesis(self, input_ids: torch.Tensor, embed_with_imitator = False) -> torch.Tensor:
         """Embeds a generated hypothesis. Has to remove EOS token and add BOS token
         at the beginning.
         """
         inputs_str = self.tokenizer.batch_decode(input_ids, skip_special_tokens=True)
+        if self.use_imitator and embed_with_imitator:
+            imitator_emb_input_ids = self.imitator_tokenizer(
+                inputs_str,
+                padding = True,
+                max_length = 50,
+                truncation = True,
+                return_attention_mask = True,
+                return_tensors = 'pt'
+            ).to(input_ids.device)
+            with torch.no_grad():
+                imitator_encoding = self.imitator_model(
+                    imitator_emb_input_ids.input_ids,
+                    imitator_emb_input_ids.attention_mask,
+                ).to(self.args.device)
+            # print(torch.mean(F.cosine_similarity(imitator_encoding, emb_encoding)))
+            return imitator_encoding
         emb_input_ids = self.embedder_tokenizer(
             inputs_str,
             max_length=input_ids.shape[1],
@@ -583,20 +644,23 @@ class Corrector(BaseTrainer):
             return_tensors="pt",
         ).to(input_ids.device)
 
-        return self.get_frozen_embeddings(
+        emb_encoding = self.get_frozen_embeddings(
             embedder_input_ids=emb_input_ids.input_ids,
             embedder_attention_mask=emb_input_ids.attention_mask,
         )
+        return emb_encoding
 
     def _get_hypothesis_uncached(self, inputs: Dict[str, torch.Tensor]) -> torch.Tensor:
         if "frozen_embeddings" in inputs:
             frozen_embeddings = inputs["frozen_embeddings"]
         else:
+            print("[WARN] HERE")
             assert (
                 "embedder_input_ids" in inputs
             ), f"cannot generate hypothesis with input keys: {inputs.keys()}"
             frozen_embeddings = self.embed_generated_hypothesis(
-                input_ids=inputs["input_ids"]
+                input_ids=inputs["input_ids"],
+                embed_with_imitator = False
             )
 
         generation_kwargs = {
@@ -617,7 +681,8 @@ class Corrector(BaseTrainer):
             hypothesis_input_ids != self.model.encoder_decoder.config.pad_token_id
         )
         hypothesis_embedding = self.embed_generated_hypothesis(
-            input_ids=hypothesis_input_ids
+            input_ids=hypothesis_input_ids,
+            embed_with_imitator = True,
         )
         return (
             frozen_embeddings,

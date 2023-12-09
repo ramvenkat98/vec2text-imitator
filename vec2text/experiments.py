@@ -12,6 +12,7 @@ import datasets
 import torch
 import transformers
 
+sys.path.append('..')
 import vec2text
 from vec2text.collator import DataCollatorForCorrection
 from vec2text.data_helpers import dataset_from_args, load_standard_val_datasets
@@ -211,10 +212,13 @@ class Experiment(abc.ABC):
                 last_checkpoint is None
                 and len(os.listdir(training_args.output_dir)) > 0
             ):
+                print("[WARN] Output directory already exists and is not empty - not raising error in this case because sometimes we expect it, but double-check that it's working as expected.")
+                '''
                 raise ValueError(
                     f"Output directory ({training_args.output_dir}) already exists and is not empty. "
                     "Use --overwrite_output_dir to overcome."
                 )
+                '''
             elif (
                 last_checkpoint is not None
                 and training_args.resume_from_checkpoint is None
@@ -604,9 +608,12 @@ class InversionExperiment(Experiment):
         return "emb-inv-4"
 
     def load_model(self) -> transformers.PreTrainedModel:
-        return InversionModel(
+        model = InversionModel(
             config=self.config,
         )
+        print("Num trainable parameters is", sum(p.numel() for p in model.parameters() if p.requires_grad))
+        print("Num parameters is", sum(p.numel() for p in model.parameters()))
+        return model
 
     def load_trainer(self) -> transformers.Trainer:
         model = self.load_model()
@@ -724,7 +731,6 @@ class InversionExperimentBagOfWords(Experiment):
             data_collator=self.get_collator(tokenizer=model.tokenizer),
         )
 
-
 class CorrectorExperiment(Experiment):
     @property
     def _wandb_project_name(self) -> str:
@@ -771,7 +777,6 @@ class CorrectorExperiment(Experiment):
             return CorrectorEncoderModel(
                 config=self.config,
             )
-
 
 EXPERIMENT_CLS_MAP = {
     "inversion": InversionExperiment,

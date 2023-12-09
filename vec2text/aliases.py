@@ -25,6 +25,7 @@ CHECKPOINT_FOLDERS_DICT = {
     "gtr_nq__msl32_beta__correct__nofeedback": "/home/jxm3/research/retrieval/inversion/saves/f031f2b69c815cca265dd791473de60a",
     # https://wandb.ai/jack-morris/emb-inv-3/runs/35f5983783e5d6c7613aa14b84af1ff6/overview?workspace=
     "clinicalbert_nq__msl32": "/home/jxm3/research/retrieval/inversion/saves/01c63decd9009f5961504b52a96cd324",
+    "nq_32_109000": "/home/ramvenkat98/vec2text/vec2text/saves/gtr-1/checkpoint-109000",
     ####################################################################
     ############################# MSMARCO ##############################
     ####################################################################

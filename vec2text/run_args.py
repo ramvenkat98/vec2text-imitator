@@ -21,6 +21,7 @@ DATASET_NAMES = [
     "msmarco",
     "one_million_instructions",
     "one_million_paired_instructions",
+    "e2e-tgt",
 ]
 
 
@@ -350,6 +351,16 @@ class TrainingArguments(transformers.TrainingArguments):
     )
 
     include_inputs_for_metrics: bool = True
+
+    use_imitator: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "If true, will use an imitator to train the corrector model instead of using"
+                " the true embeddings."
+            )
+        }
+    )
 
     def __setattr__(self, name, value):
         super(transformers.TrainingArguments, self).__setattr__(name, value)

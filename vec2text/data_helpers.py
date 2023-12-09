@@ -117,6 +117,27 @@ def dataset_from_args(data_args: DataArguments) -> datasets.DatasetDict:
                 "validation": all_luar_datasets["queries"],
             }
         )
+    elif data_args.dataset_name == "e2e-tgt":
+        splits_and_paths = [
+            ('train', "/home/ramvenkat98/Diffusion-LM/datasets/e2e_data/src1_train.txt"),
+            ('test', "/home/ramvenkat98/Diffusion-LM/datasets/e2e_data/src1_test.txt"),
+        ]
+
+        for (split, path) in splits_and_paths:
+            L = []
+            with open(path, 'r') as ff:
+                for row in ff:
+                    L.append(row.split('||')[1])
+            if split == 'train':
+                train_dataset = datasets.Dataset.from_dict({"text": L, "idx": [i for i in range(len(L))]})
+            if split == 'test':
+                val_dataset = datasets.Dataset.from_dict({"text": L, "idx": [i for i in range(len(L))]})
+        raw_datasets = datasets.DatasetDict(
+            {
+                "train": train_dataset,
+                "validation": val_dataset,
+            }
+        )
     else:
         raise ValueError(f"unsupported dataset {data_args.dataset_name}")
     return raw_datasets
