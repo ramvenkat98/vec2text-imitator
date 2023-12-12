@@ -1,4 +1,4 @@
-# Adapting Diffusion-LM for Embedding Inversion
+# Inverter + Corrector in the Zero-Query Setting
 
 This was done as part of the final project for CS236. We look to extend the predictor-corrector set-up in [this paper](https://arxiv.org/abs/2310.06816) to the setting where we are not allowed to query the true embedding model, by training a separate encoder to imitate the true embedding model using our existing training data.
 
