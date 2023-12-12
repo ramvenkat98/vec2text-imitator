@@ -1,4 +1,20 @@
-# vec2text
+# Adapting Diffusion-LM for Embedding Inversion
+
+This was done as part of the final project for CS236. We look to extend the predictor-corrector set-up in [this paper](https://arxiv.org/abs/2310.06816) to the setting where we are not allowed to query the true embedding model, by training a separate encoder to imitate the true embedding model using our existing training data.
+
+The key things to note here are:
+1. The Jupyter notebook to train the encoder, `imitator.ipynb`.
+2. The `gen_encoder_dataset.py` file used to generate its dataset.
+3. Modifications to files such as `experiments.py` and `corrector.py` to incorporate the imitator.
+
+We also give the command you can use to reproduce the results from the project report (after changing corrector model alias appropriately), once you have trained the imitator from the IPython notebook:
+```
+python run.py --per_device_train_batch_size 32 --per_device_eval_batch_size 32 --max_seq_length 32 --model_name_or_path t5-base --dataset_name nq --embedder_model_name gtr_base --num_repeat_tokens 16 --embedder_no_grad True --num_train_epochs 100 --max_eval_samples 500 --eval_steps 20000 --warmup_steps 10000 --bf16=0 --use_wandb=0 --use_frozen_embeddings_as_input True --experiment corrector --lr_scheduler_type constant_with_warmup --exp_group_name oct-gtr --learning_rate 0.001 --output_dir ./saves/gtr-corrector-with-imitator-1 --save_steps 2000 --corrector_model_alias nq_32_109000 --use_imitator True
+```
+
+## Only the changes above are from this fork, everything below is from the original repo.
+
+## vec2text
 
 <img src="https://github.com/jxmorris12/vec2text-gif/blob/master/vec2text_v3.gif" width="500" />
 
