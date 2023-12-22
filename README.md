@@ -1,6 +1,6 @@
 # Inverter + Corrector in the Zero-Query Setting
 
-This fork of the original vec2text repo contains the first part of work done for my final project for CS236 (the second part can be found [here]([https://github.com/ramvenkat98/vec2text-imitator](https://github.com/ramvenkat98/Inverting-Embeddings-Diffusion-LM/))). We look to extend the predictor-corrector set-up in [this paper](https://arxiv.org/abs/2310.06816) to the setting where we are not allowed to query the true embedding model, by training a separate encoder to imitate the true embedding model using our existing training data.
+This fork of the original vec2text repo contains the first part of work done for my final project for CS236 (the second part can be found [here](https://github.com/ramvenkat98/Inverting-Embeddings-Diffusion-LM/)). We look to extend the predictor-corrector set-up in [this paper](https://arxiv.org/abs/2310.06816) to the setting where we are not allowed to query the true embedding model, by training a separate encoder to imitate the true embedding model using our existing training data.
 
 [Project Write-Up](https://github.com/ramvenkat98/vec2text-imitator/blob/master/cs236_final_report.pdf) for reference.
 
